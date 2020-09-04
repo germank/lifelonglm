@@ -7,12 +7,10 @@
 import torch.nn as nn
 from torch.autograd import Variable
 import torch
-# NOTE: import BlockRNN from the CommAI codebase
 import sys
 import os.path
 import math
 
-from old_model import BlockRNN
 
 from multiprocessing import Manager
 
@@ -23,111 +21,6 @@ def repackage_hidden(h):
     else:
         return tuple(repackage_hidden(v) for v in h)
 
-
-
-class GraphRNN2(BlockRNN):
-    '''
-    A BlockRNN with connectivity between blocks based on an adjacency list (adj_list).
-    (The blocks thus necessarily must be diagonal.)
-
-    The nodes list is a list of number of units and lr per block:
-        [[ni, lr], ...]
-
-    The adj_list has the form:
-        [[bi, bj, lr], ...] for i != j, i, j in [0, #blocks]
-
-        where bi -> bj is a desired edge.
-    '''
-    def __init__(self, rnn_type, nin, nout, ninp, max_nhid,dropout=0.5, frozen_h=True,
-                 use_action_input=False, parent=None, strict=True):
-        # interface: (, rnn_type, nin, nout, ninp, nhid,
-        #                 dropout, parent, ponder,
-        #                 blocks, strict):
-        super(GraphRNN2, self).__init__(rnn_type, nin, nout, ninp, max_nhid,
-                                        dropout, frozen_h, parent, 1, [], strict)
-
-        # NOTE: we represent the nodes with an array of their comulative sizes
-        # e.g.: [5, 7, 10] represents three nodes of sizes 5, 2 and 3.
-        self.nodes_cum_size = []
-        # maps the node ids to block ids
-        self.node2block = {}
-        # maps links represented as (src,dest) node id pairs
-        # into the block id that impements the connection
-        self.link2block = {}
-        # special node id that represents all previous nodes
-        self._ALL_PREV_NODES = -1  # for internal use only
-
-        if parent:
-            self.nodes_cum_size = parent.nodes_cum_size
-            self.node2block = parent.node2block
-            self.link2block = parent.link2block
-
-        # NOTE: commented this code out
-        if type(self) == GraphRNN2:
-            self.rnn.state_dict()['weight_hh'][self.hh_nonactive_mask()] = 0
-
-    def add_node(self, nunits, lr, init=True):
-        '''Appends nunits that are fully connected to each other but not
-        with the rest of the network '''
-        node_id = self._add_node_limits(nunits)
-        node_start, node_end = self._get_node_limits(node_id)
-        # create block
-        b = [node_start, node_end,  # row limits
-             node_start, node_end,  # column limits
-             lr]
-        bidx = self.add_block(b)
-
-        self.node2block[node_id] = bidx
-        return node_id
-
-    def _add_node_limits(self, nunits):
-        '''Remembers the number of units per node'''
-        self.nodes_cum_size.append(
-            nunits + (self.nodes_cum_size[-1]
-                      if len(self.nodes_cum_size) > 0 else 0))
-        node_id = len(self.nodes_cum_size) - 1
-        return node_id
-
-    def _get_node_limits(self, node_id):
-        return (self.nodes_cum_size[node_id - 1] if node_id > 0 else 0,
-                self.nodes_cum_size[node_id])
-
-    def add_link(self, src, dst, lr, init=True):
-        ''' link the blocks, by adding another block!'''
-        assert src != dst
-        assert all([b >= 0 and b < len(self.blocks) for b in [src, dst]])
-
-        src_lims, dst_lims = self._get_node_limits(src), \
-            self._get_node_limits(dst)
-
-        b = [dst_lims[0], dst_lims[1], src_lims[0], src_lims[1], lr]
-
-        bidx = self.add_block(b)
-        self.link2block[(src, dst)] = bidx
-
-    def add_links_to_from_all(self, node_id, lr, init=True):
-        '''Links the node with all previously added units'''
-        node_start, node_end = self._get_node_limits(node_id)
-        # connect all previous units to the node
-        b = [node_start, node_end, 0, node_start, lr]
-        bidx = self.add_block(b)
-        self.link2block[(node_id, self._ALL_PREV_NODES)] = bidx
-        # connect all units in the node to all previous other units
-        b = [0, node_start, node_start, node_end, lr]
-        bidx = self.add_block(b)
-        self.link2block[(self._ALL_PREV_NODES, node_id)] = bidx
-
-    def share_memory(self):
-        # share adjacency list
-        self.nodes_cum_size = Manager().list(self.nodes_cum_size)
-        super(GraphRNN2, self).share_memory()
-
-    def set_node_lr(self, node_id, lr):
-        '''Sets the learning rate of the intra-node recurrent connections
-        and of all the links from and to older nodes'''
-        self.set_block_lr(self.node2block[node_id], lr)
-        self.set_block_lr(self.link2block[(node_id, self._ALL_PREV_NODES)], lr)
-        self.set_block_lr(self.link2block[(self._ALL_PREV_NODES, node_id)], lr)
 
 
 class OriginalRNNModel(nn.Module):
