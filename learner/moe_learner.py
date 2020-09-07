@@ -18,13 +18,14 @@ class MoELearner(BaseMixtureOfRNNsLearner):
     def __init__(self, rnn_type, nin, nout, ninp, nhid, nlayers,
             max_memory_size, lr, batch_size, clip, 
             optimizer, train_weights_before_predict, weights_trainer, 
-            learn_iterations,
+            learn_iterations, diverse_ensembling,
             tie_weights=False,
             w_window=20, dropout=0.2, is_cuda = True):
         super(MoELearner, self).__init__(rnn_type, nin, nout, ninp, nhid, nlayers,
             max_memory_size, lr, batch_size, clip, optimizer, train_weights_before_predict, weights_trainer,
             learn_iterations,
             tie_weights, w_window, dropout, is_cuda=is_cuda)
+        self.diverse_ensembling = diverse_ensembling
 
     def _initialize_model(self):
         for i in range(self.max_memory_size):
@@ -38,9 +39,15 @@ class MoELearner(BaseMixtureOfRNNsLearner):
                 until_convergence=False)
 
     def train_modules(self, data, outputs, targets):
-        weights = self.last_weights
-        prediction = self.get_prediction(weights.detach(), outputs)
-        loss = self.get_loss(prediction, targets)
+        if self.diverse_ensembling:
+            losses = self.get_loss_unreduced(outputs, targets.repeat(len(outputs)))
+            losses = losses.reshape(len(outputs), -1)
+            loss = losses.min(dim=0).values
+            loss = loss.mean()
+        else:
+            weights = self.last_weights
+            prediction = self.get_prediction(weights.detach(), outputs)
+            loss = self.get_loss(prediction, targets)
         self.backpropagate_and_train_modules(loss)
 
     def backpropagate_and_train_modules(self, loss):

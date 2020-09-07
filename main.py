@@ -130,6 +130,8 @@ parser.add_argument('--weight-normalization', action='store_true', default=False
                     help='if the contribution weights should be normalized')
 parser.add_argument('--load-from', 
                     help='load model from a saved checkpoint (only for debugging)') 
+parser.add_argument('--diverse-ensembling', action='store_true', default=False,
+                    help='Train experts enforcing diversity with multiple-choice learning.')
 parser.add_argument('--shadow-run', help='Compare losses to those of another run')
 parser.add_argument('--log-weights', help='filename where to store the weight history')
 args = parser.parse_args()
@@ -282,11 +284,11 @@ for sequence_index, (input_sequence, target_sequence) in enumerate(
             #print(", ".join(("{:.2f}".format(w) for w in learner.get_weights(input_chunk).detach().cpu().numpy())))
         global_position += len(input_chunk)
     sequence_loss /= sequence_length
-    print('='*120)
+    print('='*80)
     print('sequence {:4d} / {:d} ({:^10s}) | '
             'size {:5d} | loss {:5.2f} '.format(
             sequence_index, len(sequence_iterator), sequence_type_name, sequence_length, sequence_loss))
-    print('='*120)
+    print('='*80)
     #generate_text(sequence_index, 'the end', sequence_type, sequence_type_name)
 
 gen_fout.close()

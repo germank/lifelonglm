@@ -10,6 +10,7 @@ class BaseLearner(nn.Module):
     def __init__(self, criterion, vocsize, learn_iterations):
         super(BaseLearner, self).__init__()
         self.criterion = criterion
+        self.criterion_unreduced = nn.CrossEntropyLoss(reduction='none')
         self.learn_iterations = learn_iterations
         self.vocsize = vocsize
 
@@ -36,3 +37,5 @@ class BaseLearner(nn.Module):
     def get_loss(self, prediction, targets):
         return self.criterion(prediction.view(-1, self.vocsize), targets)
 
+    def get_loss_unreduced(self, prediction, targets):
+        return self.criterion_unreduced(prediction.view(-1, self.vocsize), targets)

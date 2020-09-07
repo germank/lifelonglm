@@ -37,7 +37,7 @@ def get_learner(args, vocsize):
         return learner.MoELearner(
             args.model, vocsize, vocsize, args.emsize, args.nhid,
             args.nlayers, args.max_memory_size, args.lr, args.batch_size, args.clip, args.optimizer, 
-            args.debug_train_weights_before_predict, weights_trainer, args.learn_iterations, args.tied, is_cuda=args.cuda)
+            args.debug_train_weights_before_predict, weights_trainer, args.learn_iterations, args.diverse_ensembling, args.tied, is_cuda=args.cuda)
     else:
         raise Exception(f'{args.architecture} is not a valid architecture')
 
