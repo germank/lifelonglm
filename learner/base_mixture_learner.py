@@ -7,6 +7,7 @@
 import torch
 import torch.optim as optim
 import torch.nn as nn
+import torch.nn.functional as F
 import model
 from collections import deque
 import numpy as np
@@ -18,11 +19,13 @@ import abc
 
 class BaseMixtureOfRNNsLearner(BaseLearner):
     def __init__(self, rnn_type, nin, nout, ninp, nhid, nlayers,
-            max_memory_size, lr, batch_size, clip, optimizer, train_weights_before_predict, weights_trainer, learn_iterations,
+            max_memory_size, lr, batch_size, clip, optimizer,
+            module_normalization, train_weights_before_predict, weights_trainer, learn_iterations,
             tie_weights, w_window, dropout, is_cuda):
         criterion = nn.CrossEntropyLoss()
         super(BaseMixtureOfRNNsLearner, self).__init__(criterion, nout, learn_iterations)
         self.optimizer_algorithm = optimizer
+        self.module_normalization = module_normalization
         #general parameters
         self.rnn_type = rnn_type
         self.nin = nin
@@ -139,6 +142,8 @@ class BaseMixtureOfRNNsLearner(BaseLearner):
     def forward_module(self, i, hidden, data):
         hidden = repackage_hidden(hidden)
         output, hidden = self.rnns[i].forward(data, hidden)
+        if self.module_normalization:
+            output = F.log_softmax(output, dim=2)
         self.outputs[i,:,:,:,] = output
         return output, hidden
 

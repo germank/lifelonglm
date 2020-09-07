@@ -9,7 +9,6 @@ import sys
 sys.path.append('..')
 sys.path.append('.')
 import argparse
-import config
 from pathlib import Path
 import glob
 import os.path
@@ -25,8 +24,8 @@ pd.options.display.width = 0
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--clear-cache', action='store_true', default=False)
-    ap.add_argument('--log-path')
     ap.add_argument('--mean', action='store_true', default=False)
+    ap.add_argument('log_path')
     args = ap.parse_args()
     if args.clear_cache:
         ans = input("You are about to clear the results cache. Are you sure? [y]/n: ") or "y"
@@ -34,15 +33,10 @@ def main():
             args.clear_cache = False
     else:
         sys.stderr.write('warning: using cached results when available\n')
-    df_data = get_results(args.log_path, args.clear_cache)
+    df_data = get_results(Path(args.log_path), args.clear_cache)
     display_results(df_data, args.mean)
 
 def get_results(log_path=None, clear_cache=False):
-    if log_path is None:
-        log_path = Path(config.logs_dir)/'cluster-run'
-    else:
-        log_path = Path(log_path)
-    assert log_path.exists(), f"{log_path} does not exist"
     df_configs = read_configs(log_path)
     df_data = add_results(df_configs, clear_cache)
     df_data = df_data.rename_axis('path').reset_index()

@@ -7,7 +7,7 @@
 import learner
 import train_weights
 def get_learner(args, vocsize):
-    if args.architecture == 'static':
+    if args.architecture == 'simple':
         return learner.StaticLearner(
             args.optimizer, args.lr, args.model, vocsize, args.emsize, args.nhid,
             args.nlayers, args.dropout, args.tied, args.batch_size, args.clip, args.learn_iterations)
@@ -15,7 +15,7 @@ def get_learner(args, vocsize):
         return learner.TransformerLearner(
             args.optimizer, args.lr, args.model, vocsize, args.emsize, args.nhead, args.nhid,
             args.nlayers, args.dropout, args.learn_iterations, args.transformer_warmup)
-    elif args.architecture == 'static_per_domain':
+    elif args.architecture == 'simple_per_domain':
         return learner.StaticPerDomainLearner(
             args.optimizer, args.lr, args.model, vocsize, args.emsize, args.nhid,
             args.nlayers, args.dropout, args.tied, args.batch_size, args.clip, args.learn_iterations)
@@ -32,17 +32,21 @@ def get_learner(args, vocsize):
             args.ltm_reinstatement, args.stm_consolidation, 
             args.debug_train_weights_before_predict, weights_trainer, residual_weights_trainer, 
             args.tied, is_cuda=args.cuda)
-    elif args.architecture == 'moe':
+    elif args.architecture == 'moe' or args.architecture == 'poe':
+        if args.architecture == 'moe':
+            args.module_normalization = True
         weights_trainer = get_weights_trainer(args.weights_trainer, args, vocsize)
         return learner.MoELearner(
             args.model, vocsize, vocsize, args.emsize, args.nhid,
-            args.nlayers, args.max_memory_size, args.lr, args.batch_size, args.clip, args.optimizer, 
+            args.nlayers, args.max_memory_size, args.lr, args.batch_size, args.clip, args.optimizer, args.module_normalization,
             args.debug_train_weights_before_predict, weights_trainer, args.learn_iterations, args.diverse_ensembling, args.tied, is_cuda=args.cuda)
     else:
         raise Exception(f'{args.architecture} is not a valid architecture')
 
 def get_weights_trainer(weights_trainer, args, vocsize):
     memory_size = args.max_memory_size
+    if args.architecture == 'moe':
+        args.weights_normalization = True
     if args.architecture == 'clone' and args.max_ltm_size != 0:
         memory_size += 1
     if weights_trainer == 'random':

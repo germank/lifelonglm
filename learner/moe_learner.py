@@ -17,12 +17,14 @@ from .base_mixture_learner import BaseMixtureOfRNNsLearner
 class MoELearner(BaseMixtureOfRNNsLearner):
     def __init__(self, rnn_type, nin, nout, ninp, nhid, nlayers,
             max_memory_size, lr, batch_size, clip, 
-            optimizer, train_weights_before_predict, weights_trainer, 
+            optimizer, module_normalization,
+            train_weights_before_predict, weights_trainer, 
             learn_iterations, diverse_ensembling,
             tie_weights=False,
             w_window=20, dropout=0.2, is_cuda = True):
         super(MoELearner, self).__init__(rnn_type, nin, nout, ninp, nhid, nlayers,
-            max_memory_size, lr, batch_size, clip, optimizer, train_weights_before_predict, weights_trainer,
+            max_memory_size, lr, batch_size, clip, optimizer, 
+            module_normalization, train_weights_before_predict, weights_trainer,
             learn_iterations,
             tie_weights, w_window, dropout, is_cuda=is_cuda)
         self.diverse_ensembling = diverse_ensembling
@@ -42,8 +44,11 @@ class MoELearner(BaseMixtureOfRNNsLearner):
         if self.diverse_ensembling:
             losses = self.get_loss_unreduced(outputs, targets.repeat(len(outputs)))
             losses = losses.reshape(len(outputs), -1)
-            loss = losses.min(dim=0).values
-            loss = loss.mean()
+            #per_expert_losses = losses.mean(dim=1)
+            #import sys; sys.stdout.write(str(per_expert_losses.min(dim=0).indices.item()))
+            #from collections import Counter
+            #print(Counter(losses.min(dim=0).indices.cpu().numpy()))
+            loss = losses.min(dim=0).values.mean()
         else:
             weights = self.last_weights
             prediction = self.get_prediction(weights.detach(), outputs)

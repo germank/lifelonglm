@@ -77,10 +77,10 @@ parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
 parser.add_argument('--save', type=str, default='model.pt',
                     help='[Use --log-dir to set the model destination dir]')
-parser.add_argument('--architecture', choices=['static', 'moe', 'static_per_domain', 'transformer'], 
-                    default='moe',
-                    help='Type of architecture between simple LSTM (static), '
-                    'PoE (moe), Ind. LSTM (static_per_domain) and Transformer (transformer)')
+parser.add_argument('--architecture', choices=['simple', 'poe', 'moe', 'simple_per_domain', 'transformer'], 
+                    default='poe',
+                    help='Type of architecture between simple LSTM, '
+                    'PoE, MoE, Ind. LSTM and Transformer')
 parser.add_argument('--log-dir', type=str, default='logs',
                     help='Output metrics logs directory')
 parser.add_argument('--cluster-run', action='store_true',
@@ -126,8 +126,10 @@ parser.add_argument('--debug-train-weights-before-predict', action='store_true',
                     help='if the combination weights are updated before backprop')
 parser.add_argument('--debug-reveal-domain', action='store_true', default=False,
                     help='give away the domain corresponding to the current sequence')
+parser.add_argument('--module-normalization', action='store_true', default=False,
+                    help='each module\'s output are normalized')
 parser.add_argument('--weight-normalization', action='store_true', default=False,
-                    help='if the contribution weights should be normalized')
+                    help='the mixture weights should be normalized')
 parser.add_argument('--load-from', 
                     help='load model from a saved checkpoint (only for debugging)') 
 parser.add_argument('--diverse-ensembling', action='store_true', default=False,
@@ -140,7 +142,7 @@ print("selected options:")
 for arg in args.__dict__.items():
     print("\t".join(map(str, arg)))
 
-if args.cluster_run:
+if args.cluster_run and os.environ.get('SLURM_JOB_ID'):
     args.log_dir = os.path.join(args.log_dir, "cluster-run")
     if args.cluster_run_name:
         args.log_dir = os.path.join(args.log_dir, args.cluster_run_name)
