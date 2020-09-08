@@ -28,6 +28,7 @@ class MoELearner(BaseMixtureOfRNNsLearner):
             learn_iterations,
             tie_weights, w_window, dropout, is_cuda=is_cuda)
         self.diverse_ensembling = diverse_ensembling
+        self.warming = False
 
     def _initialize_model(self):
         for i in range(self.max_memory_size):
@@ -41,13 +42,9 @@ class MoELearner(BaseMixtureOfRNNsLearner):
                 until_convergence=False)
 
     def train_modules(self, data, outputs, targets):
-        if self.diverse_ensembling:
+        if self.diverse_ensembling and not self.warming:
             losses = self.get_loss_unreduced(outputs, targets.repeat(len(outputs)))
             losses = losses.reshape(len(outputs), -1)
-            #per_expert_losses = losses.mean(dim=1)
-            #import sys; sys.stdout.write(str(per_expert_losses.min(dim=0).indices.item()))
-            #from collections import Counter
-            #print(Counter(losses.min(dim=0).indices.cpu().numpy()))
             loss = losses.min(dim=0).values.mean()
         else:
             weights = self.last_weights
@@ -76,3 +73,17 @@ class MoELearner(BaseMixtureOfRNNsLearner):
 
     def get_lr(self):
         return self.optimizer.param_groups[0]['lr']
+
+    def warmup_start(self):
+        self.after_warmup_weights_trainer = self.weights_trainer
+        self.weights_trainer = train_weights.FixedWeights(self.get_n_modules())
+        self.weights_trainer.n = self.get_n_modules()
+        if next(self.after_warmup_weights_trainer.parameters()).is_cuda:
+            self.weights_trainer.cuda()
+        self.warming = True
+
+    def warmup_end(self):
+        self.weights_trainer = self.after_warmup_weights_trainer
+        del self.after_warmup_weights_trainer
+        self.warming = False
+

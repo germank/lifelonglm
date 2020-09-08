@@ -67,3 +67,5 @@ def get_weights_trainer(weights_trainer, args, vocsize):
     else:
         raise Exception(f'{args.weights_trainer} is not a valid weight training mechanism')
     return weights_trainer
+
+

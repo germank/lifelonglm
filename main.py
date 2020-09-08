@@ -47,6 +47,8 @@ parser.add_argument('--nhead', type=int, default=10,
                     help='number of attention heads for transformer')
 parser.add_argument('--transformer-warmup', type=int, default=4000,
                     help='warmup steps for the transformer model')
+parser.add_argument('--moe-warmup', type=int, default=0,
+                    help='number of sequences used to train all modules')
 parser.add_argument('--nlayers', type=int, default=2,
                     help='number of layers')
 parser.add_argument('--lr', type=float, default=0.001,
@@ -240,12 +242,17 @@ global_loss = 0
 global_position = 0
 loss_hist = []
 global_start_time = time.time()
+if args.moe_warmup > 0:
+    learner.warmup_start()  # changes the weights trainer
+weights_summarizer = log_utils.WeightsSummary(learner, domain_switched)
 for sequence_index, (input_sequence, target_sequence) in enumerate(
         data.safe_iterate_sequences(sequence_iterator, args.max_sequences)):
     if args.first_sequence and sequence_index < args.first_sequence:
         # FIXME: this logic should be in the sequence iterator
         global_position += len(input_sequence)
         continue
+    if sequence_index == args.moe_warmup:
+        learner.warmup_end()  # changes the weights trainer
     sequence_type = sequence_iterator.get_current_index()
     sequence_type_name = sequence_iterator.get_current_iterator().get_name()
     domain_switched(sequence_index, sequence_type, sequence_type_name)

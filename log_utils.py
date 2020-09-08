@@ -157,3 +157,24 @@ class WeightsLogger(object):
     def log_line(self, data):
         self.fout.write(json.dumps(data))
         self.fout.write('\n')
+
+class WeightsSummary(object):
+    def __init__(self, learner, domain_switched_obs):
+        self.weights = torch.zeros(learner.get_n_modules())
+        learner.weights_updated.register(self.on_weights_updated)
+        domain_switched_obs.register(self.on_domain_switched)
+
+    def on_weights_updated(self, weights):
+        if len(weights.reshape(-1)) > len(self.weights):
+            weights = weights.reshape(self.weights.shape[0], -1).mean(dim=1)
+        self.weights += weights.detach().cpu()
+
+    def on_domain_switched(self, seq_idx, domain_id, domain_name):
+        if seq_idx == 0:
+            return
+        abs_weights = self.weights.abs()
+        sorted_weights, indices = abs_weights.sort()
+        most_picked_expert = indices[0].item()
+        rel_weights = (abs_weights[most_picked_expert] / abs_weights.sum()).item() * 100
+        print(f'Most commonly picked expert {most_picked_expert} ({rel_weights:.2f}% of the mass)')
+        self.weights.zero_()
