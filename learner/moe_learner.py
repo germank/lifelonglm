@@ -83,7 +83,8 @@ class MoELearner(BaseMixtureOfRNNsLearner):
         self.warming = True
 
     def warmup_end(self):
-        self.weights_trainer = self.after_warmup_weights_trainer
-        del self.after_warmup_weights_trainer
-        self.warming = False
+        if self.warming:
+            self.weights_trainer = self.after_warmup_weights_trainer
+            del self.after_warmup_weights_trainer
+            self.warming = False
 

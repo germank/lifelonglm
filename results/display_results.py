@@ -259,7 +259,7 @@ def get_df_grouped(df_data, mean=False):
             'weights_trainer_annealing', 'consolidation_period', 'max_stm_size', 
             'max_memory_size', 'ltm_deallocation', 'stm_initialization', 'weight_normalization' ]
     show = ['surprisal_intensity', 'surprisal_duration']
-    group_by = ['data', 'total_length', 'lang_switch', 'architecture', 'nhid', 'weights_trainer', 'learn_iterations']
+    group_by = ['data', 'total_length', 'lang_switch', 'architecture', 'nhid', 'weights_trainer', 'diverse_ensembling', 'moe_warmup']
     #pp_cols = [c for c in df_data.columns if c.startswith('total_pp')]
     #loss_cols = [c for c in df_data.columns if c.startswith('loss')]
     #surp_cols = [c for c in df_data.columns if c.startswith('surp')]

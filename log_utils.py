@@ -174,7 +174,7 @@ class WeightsSummary(object):
             return
         abs_weights = self.weights.abs()
         sorted_weights, indices = abs_weights.sort()
-        most_picked_expert = indices[0].item()
+        most_picked_expert = indices[-1].item()
         rel_weights = (abs_weights[most_picked_expert] / abs_weights.sum()).item() * 100
         print(f'Most commonly picked expert {most_picked_expert} ({rel_weights:.2f}% of the mass)')
         self.weights.zero_()
