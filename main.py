@@ -79,7 +79,7 @@ parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
 parser.add_argument('--save', type=str, default='model.pt',
                     help='[Use --log-dir to set the model destination dir]')
-parser.add_argument('--architecture', choices=['simple', 'poe', 'moe', 'simple_per_domain', 'transformer'], 
+parser.add_argument('--architecture', choices=['simple', 'poe', 'moe', 'simple_per_domain', 'transformer', 'mos'],
                     default='poe',
                     help='Type of architecture between simple LSTM, '
                     'PoE, MoE, Ind. LSTM and Transformer')
@@ -132,10 +132,13 @@ parser.add_argument('--module-normalization', action='store_true', default=False
                     help='each module\'s output are normalized')
 parser.add_argument('--weight-normalization', action='store_true', default=False,
                     help='the mixture weights should be normalized')
-parser.add_argument('--load-from', 
-                    help='load model from a saved checkpoint (only for debugging)') 
+parser.add_argument('--load-from',
+                    help='load model from a saved checkpoint (only for debugging)')
 parser.add_argument('--diverse-ensembling', action='store_true', default=False,
                     help='Train experts enforcing diversity with multiple-choice learning.')
+parser.add_argument('--nsoftmaxes', type = int, default = 10,
+                    help='the number of softmaxes applied for MoS model')
+
 parser.add_argument('--shadow-run', help='Compare losses to those of another run')
 parser.add_argument('--log-weights', help='filename where to store the weight history')
 args = parser.parse_args()
@@ -242,16 +245,17 @@ global_loss = 0
 global_position = 0
 loss_hist = []
 global_start_time = time.time()
-if args.moe_warmup > 0:
-    learner.warmup_start()  # changes the weights trainer
-weights_summarizer = log_utils.WeightsSummary(learner, domain_switched)
+if args.architecture == 'poe':
+    if args.moe_warmup > 0:
+        learner.warmup_start()  # changes the weights trainer
+    weights_summarizer = log_utils.WeightsSummary(learner, domain_switched)
 for sequence_index, (input_sequence, target_sequence) in enumerate(
         data.safe_iterate_sequences(sequence_iterator, args.max_sequences)):
     if args.first_sequence and sequence_index < args.first_sequence:
         # FIXME: this logic should be in the sequence iterator
         global_position += len(input_sequence)
         continue
-    if sequence_index == args.moe_warmup:
+    if sequence_index == args.moe_warmup and args.architecture == 'poe':
         learner.warmup_end()  # changes the weights trainer
     sequence_type = sequence_iterator.get_current_index()
     sequence_type_name = sequence_iterator.get_current_iterator().get_name()
@@ -261,7 +265,7 @@ for sequence_index, (input_sequence, target_sequence) in enumerate(
     sequence_end = global_position + sequence_length
     start_time = time.time()
     for chunk_index, (input_chunk, target_chunk) in enumerate(
-            data.safe_iterate_chunks(input_sequence, target_sequence, 
+            data.safe_iterate_chunks(input_sequence, target_sequence,
                 args.bptt, args.batch_size)):
         timestep_updated(chunk_index, global_position)
         batch_loss = None

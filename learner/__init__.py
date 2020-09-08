@@ -15,4 +15,4 @@ from .moe_learner import MoELearner
 from .static_learner import StaticLearner
 from .static_per_domain_learner import StaticPerDomainLearner
 from .transformer_learner import TransformerLearner
-
+from .mos_learner import MoSLearner

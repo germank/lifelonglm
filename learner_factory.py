@@ -11,6 +11,11 @@ def get_learner(args, vocsize):
         return learner.StaticLearner(
             args.optimizer, args.lr, args.model, vocsize, args.emsize, args.nhid,
             args.nlayers, args.dropout, args.tied, args.batch_size, args.clip, args.learn_iterations)
+    if args.architecture == 'mos':
+        return learner.MoSLearner(
+            args.optimizer, args.lr, args.model, vocsize, args.emsize, args.nhid,
+            args.nlayers, args.nsoftmaxes, args.dropout, args.tied,
+            args.batch_size, args.clip, args.learn_iterations)
     if args.architecture == 'transformer':
         return learner.TransformerLearner(
             args.optimizer, args.lr, args.model, vocsize, args.emsize, args.nhead, args.nhid,
@@ -29,8 +34,8 @@ def get_learner(args, vocsize):
         return learner.CloneLearner(
             args.model, int(args.consolidation_period / (args.batch_size * args.bptt)) if args.consolidation_period else None, args.consolidation_threshold, vocsize, vocsize, args.emsize, args.nhid,
             args.nlayers, args.max_memory_size, args.max_ltm_size, args.stm_size, args.lr, args.batch_size, args.clip, args.optimizer,
-            args.ltm_reinstatement, args.stm_consolidation, 
-            args.debug_train_weights_before_predict, weights_trainer, residual_weights_trainer, 
+            args.ltm_reinstatement, args.stm_consolidation,
+            args.debug_train_weights_before_predict, weights_trainer, residual_weights_trainer,
             args.tied, is_cuda=args.cuda)
     elif args.architecture == 'moe' or args.architecture == 'poe':
         if args.architecture == 'moe':

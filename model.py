@@ -177,3 +177,74 @@ class TransformerModel(nn.Module):
         output = self.decoder(output)
         return output #F.log_softmax(output, dim=-1)
 
+
+class MoSRNNModel(nn.Module):
+    """Container module with an encoder, a recurrent module, and a decoder."""
+
+    def __init__(self, rnn_type, ntoken, ninp, nhid, nlayers, n_experts, dropout=0.5, tie_weights=False):
+        super(MoSRNNModel, self).__init__()
+        self.drop = nn.Dropout(dropout)
+        self.encoder = nn.Embedding(ntoken, ninp)
+        self.prior = nn.Linear(nhid, n_experts, bias=False)
+        self.n_experts = n_experts
+        self.ntoken = ntoken
+        self.ninp = ninp
+        self.latent = nn.Sequential(nn.Linear(nhid, n_experts*nhid), nn.Tanh())
+
+        if rnn_type in ['LSTM', 'GRU']:
+            self.rnn = getattr(nn, rnn_type)(ninp, nhid, nlayers, dropout=dropout)
+        else:
+            try:
+                nonlinearity = {'RNN_TANH': 'tanh', 'RNN_RELU': 'relu'}[rnn_type]
+            except KeyError:
+                raise ValueError( """An invalid option for `--model` was supplied,
+                                 options are ['LSTM', 'GRU', 'RNN_TANH' or 'RNN_RELU']""")
+            self.rnn = nn.RNN(ninp, nhid, nlayers, nonlinearity=nonlinearity, dropout=dropout)
+        self.decoder = nn.Linear(nhid, ntoken)
+
+        if tie_weights:
+            if nhid != ninp:
+                raise ValueError('When using the tied flag, nhid must be equal to emsize')
+            self.decoder.weight = self.encoder.weight
+
+        self.init_weights()
+
+        self.rnn_type = rnn_type
+        self.nhid = nhid
+        self.nlayers = nlayers
+        self.vocsize = ntoken
+
+    def init_weights(self):
+        initrange = 0.1
+        self.encoder.weight.data.uniform_(-initrange, initrange)
+        self.decoder.bias.data.fill_(0)
+        self.decoder.weight.data.uniform_(-initrange, initrange)
+
+    def forward(self, input, hidden):
+        emb = self.drop(self.encoder(input))
+        output, hidden = self.rnn(emb, hidden)
+        #print(self.output)
+        #print(self.rnn.weight_ih.data)
+        output = self.drop(output)
+
+        latent = self.latent(output)
+        latent = self.drop(latent)
+        logit = self.decoder(latent.view(-1, self.nhid))
+
+        prior_logit = self.prior(output).contiguous().view(-1, self.n_experts)
+        prior = nn.functional.softmax(prior_logit, -1)
+
+        prob = nn.functional.softmax(logit.view(-1, self.ntoken), -1).view(-1, self.n_experts, self.ntoken)
+        prob = (prob * prior.unsqueeze(2).expand_as(prob)).sum(1)
+        prob = torch.log(prob.add_(1e-8))
+        return prob.view(output.size(0), output.size(1), prob.size(1)), hidden
+
+    def init_hidden(self, bsz):
+        weight = next(self.parameters()).data
+        if self.rnn_type == 'LSTM':
+            return (Variable(weight.new(self.nlayers, bsz, self.nhid).zero_()),
+                    Variable(weight.new(self.nlayers, bsz, self.nhid).zero_()))
+        else:
+            return Variable(weight.new(self.nlayers, bsz, self.nhid).zero_())
+
+
