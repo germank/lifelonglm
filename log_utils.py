@@ -160,9 +160,11 @@ class WeightsLogger(object):
 
 class WeightsSummary(object):
     def __init__(self, learner, domain_switched_obs):
-        self.weights = torch.zeros(learner.get_n_modules())
-        learner.weights_updated.register(self.on_weights_updated)
-        domain_switched_obs.register(self.on_domain_switched)
+        if hasattr(learner, 'get_n_modules'):
+            # only works for moe/poe
+            self.weights = torch.zeros(learner.get_n_modules())
+            learner.weights_updated.register(self.on_weights_updated)
+            domain_switched_obs.register(self.on_domain_switched)
 
     def on_weights_updated(self, weights):
         if len(weights.reshape(-1)) > len(self.weights):

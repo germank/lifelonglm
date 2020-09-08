@@ -245,10 +245,9 @@ global_loss = 0
 global_position = 0
 loss_hist = []
 global_start_time = time.time()
-if args.architecture == 'poe':
-    if args.moe_warmup > 0:
-        learner.warmup_start()  # changes the weights trainer
-    weights_summarizer = log_utils.WeightsSummary(learner, domain_switched)
+if args.moe_warmup > 0:
+    learner.warmup_start()  # changes the weights trainer
+weights_summarizer = log_utils.WeightsSummary(learner, domain_switched)
 for sequence_index, (input_sequence, target_sequence) in enumerate(
         data.safe_iterate_sequences(sequence_iterator, args.max_sequences)):
     if args.first_sequence and sequence_index < args.first_sequence:
