@@ -27,7 +27,6 @@ def write_config_file(path, args):
     conf_file = os.path.join(path, 'config.ini')
     config = configparser.ConfigParser()
     for section in vars(args).keys():
-        print(section)
         config.add_section(section)
         value = vars(args)[section]
         if value == 'True': value = 'yes'

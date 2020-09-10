@@ -154,6 +154,8 @@ if args.cluster_run and os.environ.get('SLURM_JOB_ID'):
     slurm_id = os.environ.get('SLURM_JOB_ID')
     args.log_dir = os.path.join(args.log_dir, slurm_id)
 
+print(f"Logging results to {args.log_dir}")
+
 
 args.log_dir = log_utils.create_log_folder(args.log_dir)
 args.save = os.path.join(args.log_dir, 'model.pt')
@@ -189,7 +191,7 @@ vocsize = len(corpora.vocabulary)
 print('Vocabulary size:', vocsize)
 print('Creating learner...')
 learner = get_learner(args, vocsize)
-print('Number of parameters:', learner.get_num_parameters())
+print(f'Number of parameters: {learner.get_num_parameters()/1e6:1.2f}M')
 if args.cuda:
     learner.cuda()
 if args.load_from:
