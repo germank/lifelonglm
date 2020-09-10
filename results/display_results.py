@@ -1,10 +1,11 @@
+#!/usr/bin/env python
+
 # Copyright (c) Facebook, Inc. and its affiliates.
 # All rights reserved.
 #
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
-#!/usr/bin/env python
 import sys
 sys.path.append('..')
 sys.path.append('.')
@@ -24,7 +25,7 @@ pd.options.display.width = 0
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--clear-cache', action='store_true', default=False)
-    ap.add_argument('--mean', action='store_true', default=False)
+    ap.add_argument('--agg', choices=['mean', 'std', 'min', 'count'], default='min')
     ap.add_argument('log_path')
     args = ap.parse_args()
     if args.clear_cache:
@@ -34,14 +35,14 @@ def main():
     else:
         sys.stderr.write('warning: using cached results when available\n')
     df_data = get_results(Path(args.log_path), args.clear_cache)
-    display_results(df_data, args.mean)
+    display_results(df_data, args.agg)
 
 def get_results(log_path=None, clear_cache=False):
     df_configs = read_configs(log_path)
     df_data = add_results(df_configs, clear_cache)
     df_data = df_data.rename_axis('path').reset_index()
     df_data.path = df_data.path.apply(lambda x: os.path.basename(x))
-    df_data = df_data.set_index('path')
+    df_data = df_data.set_index('path', drop=False)
     return df_data
 
 def read_configs(log_path):
@@ -209,10 +210,10 @@ def read_config_file(filename):
 def get_id(filename):
     return int(filename.parent.name)
 
-def display_results(df_data, mean):
+def display_results(df_data, agg):
     pd.options.display.float_format = '{:,.3g}'.format
     pd.set_option('display.max_columns', 500)
-    df_grouped = get_df_grouped(df_data, mean)
+    df_grouped = get_df_grouped(df_data, agg)
     uniform_values = {}
     # for col in df_grouped.columns:
     #     some_col_value = df_grouped.reset_index()[col].iloc[0]
@@ -253,13 +254,13 @@ def get_test_results_for_dev_hyperparams(df_data, dev_best, test_data):
 
 
 
-def get_df_grouped(df_data, mean=False):
+def get_df_grouped(df_data, op='min'):
     show = ['lr', 
             'weights_trainer', 'learn_iterations', 'weights_trainer', 'weights_trainer_lr', 
             'weights_trainer_annealing', 'consolidation_period', 'max_stm_size', 
             'max_memory_size', 'ltm_deallocation', 'stm_initialization', 'weight_normalization' ]
-    show = ['surprisal_intensity', 'surprisal_duration']
-    group_by = ['data', "path", 'total_length', 'lang_switch', 'architecture', 'nhid', 'weights_trainer', 'diverse_ensembling', 'moe_warmup']
+    show = ['surprisal_intensity', 'surprisal_duration', 'path']
+    group_by = ['data', 'total_length', 'lang_switch', 'architecture', 'nhid', 'weights_trainer']
     #pp_cols = [c for c in df_data.columns if c.startswith('total_pp')]
     #loss_cols = [c for c in df_data.columns if c.startswith('loss')]
     #surp_cols = [c for c in df_data.columns if c.startswith('surp')]
@@ -272,11 +273,17 @@ def get_df_grouped(df_data, mean=False):
     df_data['z_score'] = df_grouped.total_pp.apply(lambda x: (x -x.mean()) /x.std())
     #df_data = df_data[abs(df_data['z_score']) < 2]
     df_grouped = df_data.groupby(group_by)
-    if mean:
+    if op == 'mean':
         df_grouped = df_grouped.mean()
+    elif op == 'count':
+        df_grouped = df_grouped.count()
+    elif op == 'std':
+        df_grouped = df_grouped.std()
     else:
         df_grouped = df_grouped.apply(lambda x: x.loc[x[merit] == x[merit].min(), [merit] + show])
-    df_grouped = df_grouped.drop_duplicates(subset=[merit])[[merit]+show]
+        df_grouped = df_grouped.drop_duplicates(subset=[merit])
+
+    df_grouped = df_grouped[[merit]+show]
                     #.sort_values(merit)
     return df_grouped
 

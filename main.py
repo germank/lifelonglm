@@ -77,7 +77,7 @@ parser.add_argument('--seed', type=int, default=1111,
                     help='random seed')
 parser.add_argument('--cuda', action='store_true',
                     help='use CUDA')
-parser.add_argument('--save', type=str, default='model.pt',
+parser.add_argument('--save', type=str, 
                     help='[Use --log-dir to set the model destination dir]')
 parser.add_argument('--architecture', choices=['simple', 'poe', 'moe', 'simple_per_domain', 'transformer', 'mos'],
                     default='poe',
@@ -158,7 +158,8 @@ print(f"Logging results to {args.log_dir}")
 
 
 args.log_dir = log_utils.create_log_folder(args.log_dir)
-args.save = os.path.join(args.log_dir, 'model.pt')
+if args.save:
+    args.save = os.path.join(args.log_dir, args.save)
 log_utils.write_config_file(args.log_dir, args)
 gen_fout = open(args.log_dir + '/general_pp.txt', 'w')
 gen_json_fout = open(args.log_dir + '/general_pp.jsonl', 'w')
