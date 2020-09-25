@@ -16,6 +16,7 @@ import os.path
 from configparser import ConfigParser
 import pandas as pd
 import json
+import yaml
 import tqdm
 import numpy as np
 import math
@@ -25,7 +26,8 @@ pd.options.display.width = 0
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--clear-cache', action='store_true', default=False)
-    ap.add_argument('--agg', choices=['mean', 'std', 'min', 'count'], default='min')
+    ap.add_argument('--agg', choices=['mean', 'std', 'min', 'count', 'last'], default='min')
+    ap.add_argument('--save-test-configs', type=Path, help='directory where to put configuration files for winning hyperparameters')
     ap.add_argument('log_path')
     args = ap.parse_args()
     if args.clear_cache:
@@ -35,7 +37,13 @@ def main():
     else:
         sys.stderr.write('warning: using cached results when available\n')
     df_data = get_results(Path(args.log_path), args.clear_cache)
-    display_results(df_data, args.agg)
+    df_grouped = get_df_grouped(df_data, args.agg)
+    display_results(df_grouped)
+    if args.save_test_configs:
+        args.save_test_configs.mkdir(exist_ok=True)
+        flat_df = df_to_numeric(df_grouped.reset_index(drop=True))
+        save_test_configs(flat_df.loc[flat_df.data.str.contains("dev")],
+                args.save_test_configs)
 
 def get_results(log_path=None, clear_cache=False):
     df_configs = read_configs(log_path)
@@ -210,30 +218,37 @@ def read_config_file(filename):
 def get_id(filename):
     return int(filename.parent.name)
 
-def display_results(df_data, agg):
+def display_results(df_grouped):
     pd.options.display.float_format = '{:,.3g}'.format
     pd.set_option('display.max_columns', 500)
-    df_grouped = get_df_grouped(df_data, agg)
     uniform_values = {}
     # for col in df_grouped.columns:
     #     some_col_value = df_grouped.reset_index()[col].iloc[0]
     #     if ((df_grouped[col] == some_col_value).all()):
     #         uniform_values[col] = some_col_value
     #         df_grouped = df_grouped.drop(col, axis=1)
-    print(df_grouped)
+    show = ['total_pp', 'surprisal_intensity', 'surprisal_duration', 'path', 'moe_warmup']
+    print(df_grouped[[c for c in show if c in df_grouped.columns]])
     for k, v in uniform_values.items():
         print(f"{k: <20}\t{v}")
 
-arch_hyperparameters ={'moe':  ['lang_switch', 'total_length', 'architecture', 'lr', 
-        'weights_trainer', 'learn_iterations', 'weights_trainer_lr', 
-        'weights_trainer_annealing', 'weight_normalization'],
-'clone': ['lang_switch', 'total_length', 'architecture', 'lr', 
-        'weights_trainer', 'learn_iterations', 'weights_trainer_lr', 
-        'weights_trainer_annealing', 'consolidation_period', 'max_stm_size', 
-        'max_memory_size', 'ltm_deallocation', 'stm_initialization'],
-'static' : ['lang_switch', 'total_length', 'architecture', 'nhid', 'lr', 
-        'learn_iterations'],
-'static_per_domain' : ['lang_switch', 'total_length', 'architecture', 'nhid', 'lr', 
+general_parameters = ['data', 'lang_switch', 'total_length', 'architecture', 'lr', 
+        'dropout', 'emsize', 'nhid', 'nlayers']
+arch_hyperparameters = {
+        'moe':  ['lr', 'learn_iterations', 'weights_trainer', 
+        'weights_trainer_iterations', 'max_memory_size', 'moe_warmup'],
+        'mos': ['lr', 'nsoftmaxes', 'learn_iterations'],
+        'poe':  ['lang_switch', 'total_length', 'architecture', 'lr', 
+                'weights_trainer', 'learn_iterations', 'weights_trainer_lr', 
+                'weights_trainer_annealing', 'weight_normalization'],
+        'clone': ['lang_switch', 'total_length', 'architecture', 'lr', 
+                'weights_trainer', 'learn_iterations', 'weights_trainer_lr', 
+                'weights_trainer_annealing', 'consolidation_period', 'max_stm_size', 
+                'max_memory_size', 'ltm_deallocation', 'stm_initialization'],
+        'simple' : ['lang_switch', 'total_length', 'architecture', 'nhid', 'lr', 
+                'learn_iterations'],
+        'transformer' : ['nhead','transformer_warmup', 'transformer_after_warmup'],
+        'simple_per_domain' : ['lang_switch', 'total_length', 'architecture', 'nhid', 'lr', 
         'learn_iterations']}
 def get_test_results_for_dev_hyperparams(df_data, dev_best, test_data):
     test_rows = []
@@ -248,18 +263,13 @@ def get_test_results_for_dev_hyperparams(df_data, dev_best, test_data):
         if selected.empty:
             missing_rows.append(data_row)
             continue
-        assert selected.ndim == 1 or (selected.iloc[0]['total_pp'] == selected['total_pp']).all() or np.isnan(selected.iloc[0]['total_pp']) or (selected.iloc[0]['architecture'] ==  'static')
+        assert selected.ndim == 1 or (selected.iloc[0]['total_pp'] == selected['total_pp']).all() or np.isnan(selected.iloc[0]['total_pp']) or (selected.iloc[0]['architecture'] ==  'simple')
         test_rows.append(selected.iloc[0])
     return pd.DataFrame(test_rows), pd.DataFrame(missing_rows)
 
 
 
 def get_df_grouped(df_data, op='min'):
-    show = ['lr', 
-            'weights_trainer', 'learn_iterations', 'weights_trainer', 'weights_trainer_lr', 
-            'weights_trainer_annealing', 'consolidation_period', 'max_stm_size', 
-            'max_memory_size', 'ltm_deallocation', 'stm_initialization', 'weight_normalization' ]
-    show = ['surprisal_intensity', 'surprisal_duration', 'path']
     group_by = ['data', 'total_length', 'lang_switch', 'architecture', 'nhid', 'weights_trainer']
     #pp_cols = [c for c in df_data.columns if c.startswith('total_pp')]
     #loss_cols = [c for c in df_data.columns if c.startswith('loss')]
@@ -267,7 +277,6 @@ def get_df_grouped(df_data, op='min'):
     #show.extend(pp_cols)
     #show.extend(loss_cols)
     #show.extend(surp_cols)
-    show = [c for c in set(show) if c not in group_by]
     merit = 'total_pp'
     df_grouped = df_data.groupby(group_by)
     df_data['z_score'] = df_grouped.total_pp.apply(lambda x: (x -x.mean()) /x.std())
@@ -279,11 +288,13 @@ def get_df_grouped(df_data, op='min'):
         df_grouped = df_grouped.count()
     elif op == 'std':
         df_grouped = df_grouped.std()
+    elif op == 'last':
+        df_grouped = df_grouped.last()
     else:
-        df_grouped = df_grouped.apply(lambda x: x.loc[x[merit] == x[merit].min(), [merit] + show])
+        df_grouped = df_grouped.apply(lambda x: x.loc[x[merit] == x[merit].min(), x.keys()])
         df_grouped = df_grouped.drop_duplicates(subset=[merit])
 
-    df_grouped = df_grouped[[merit]+show]
+    #df_grouped = df_grouped[[merit]+show]
                     #.sort_values(merit)
     return df_grouped
 
@@ -330,6 +341,63 @@ def row_to_command_line(df_data, dr_run, make_test=False):
             args.append((c,val))
     command_line_args = " ".join(f"--{k} {v}" for k,v in args)
     return command_line_args
+
+
+def save_test_configs(df_best_cfgs, save_dir):
+    for k,row in df_best_cfgs.iterrows():
+        cfg = cfg_ds2dict(row)
+        if cfg['data'] == 'domain_dev':
+            cfg['data'] = 'data/domain_test'
+            cfg['model-level'] = 'word'
+        elif cfg['data'] == 'news_dev':
+            cfg['data'] = 'data/news_test'
+            cfg['model-level'] = 'char'
+        cfg['cuda'] = True
+        cfg['cluster-run'] = True
+        cfg['cluster-run-name'] = cfg['architecture'] + '_test'
+        cfg['log-dir'] = 'logs'
+        for i in range(10):
+            cfg['seed'] = i
+            cfg_name = cfg2name(cfg)
+            with open(save_dir / (cfg_name + '.yml'), 'w') as f:
+                yaml.dump(cfg, f)
+
+def cfg_ds2dict(row):
+    ret = {}
+    for k in set(general_parameters + arch_hyperparameters[row['architecture']]):
+        ret[k.replace('_', '-')] = row[k]
+    return ret
+
+def cfg2name(cfg):
+    if cfg['architecture'] in ['moe', 'poe']:
+        arch_id = f"{cfg['architecture']}_{cfg['weights-trainer']}_{cfg['max-memory-size']}"
+    else:
+        arch_id = f"{cfg['architecture']}"
+    return f"{arch_id}_{cfg['data'].split('/')[1][:-len('_test')]}_"\
+            f"{number(cfg['total-length'])}_{number(cfg['lang-switch'])}_{cfg['seed']}"
+
+def number(n):
+    n = int(n)
+    if n >= 1e6:
+        return f"{n//1000000:0d}M"
+    elif n >= 1e3:
+        return f"{n//1000:0d}k"
+    else:
+        return n
+
+def df_to_numeric(df):
+    cols = df.columns 
+    for c in cols: 
+        try: 
+            new_c = pd.to_numeric(df[c].dropna(), downcast='integer')
+            if pd.api.types.is_integer_dtype(new_c.dtype):
+                new_c = new_c.astype('Int64')
+            df[c] = new_c
+        except ValueError:
+            pass 
+        except TypeError:
+            pass 
+    return df
 
 if __name__ == '__main__':
     main()

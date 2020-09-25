@@ -236,7 +236,7 @@ class MoSRNNModel(nn.Module):
 
         prob = nn.functional.softmax(logit.view(-1, self.ntoken), -1).view(-1, self.n_experts, self.ntoken)
         prob = (prob * prior.unsqueeze(2).expand_as(prob)).sum(1)
-        prob = torch.log(prob)
+        prob = torch.log(prob.add_(1e-8))
         return prob.view(output.size(0), output.size(1), prob.size(1)), hidden
 
     def init_hidden(self, bsz):

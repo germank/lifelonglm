@@ -6,46 +6,62 @@
 
 from .base_learner import BaseLearner
 import model
+import torch
 import torch.nn as nn
 import torch.optim as optim
 
 class TransformerLearner(BaseLearner):
-    def __init__(self, optimizer, lr, model_type, vocsize, emsize, nhead, nhid, nlayers, dropout, learn_iterations, warmup):
+    def __init__(self, optimizer, lr, model_type, vocsize, emsize, buffer_len, nhead, nhid, nlayers, dropout, learn_iterations, warmup, after_warmup):
         criterion = nn.CrossEntropyLoss()
         super(TransformerLearner, self).__init__(
             criterion, vocsize, learn_iterations)
         self.model = model.TransformerModel(
             vocsize, emsize, nhead, nhid, nlayers, dropout)
         self.dmodel = emsize
-        self.lr = lr
+        if lr == 42:
+            self.lr = self.dmodel**-0.5
+        else:
+            self.lr = lr
         self.step = 1
         self.warmup = warmup
+        self.after_warmup = after_warmup
+        self.buffer_len = buffer_len
+        self.buffer = None
         kwargs = {}
-        if lr == 42:
-            if optimizer == 'Adam':
-                kwargs['betas'] = (0.9, 0.98)
-                kwargs['eps'] = 1e-8
-            lr = self.compute_lr()
-            self.auto_lr = True
-        else:
-            self.auto_lr = False
+        if optimizer == 'Adam':
+            kwargs['betas'] = (0.9, 0.98)
+            kwargs['eps'] = 1e-9
+        lr = self.compute_lr()
         self.optimizer = getattr(optim, optimizer)(self.model.parameters(), lr=lr)
 
     def compute_lr(self):
-        return (1.0 /self.dmodel) * min(self.step**-0.5, self.step*self.warmup**-1.5)
+        return self.lr * min(self.step**-0.5 if self.after_warmup == 'decrease' else self.warmup**-0.5,
+                self.step*self.warmup**-1.5)
     
     def learn(self, *args):
-        if self.auto_lr:
-            self.optimizer.param_groups[0]['lr'] = self.compute_lr()
-            self.step += 1
+        self.optimizer.param_groups[0]['lr'] = self.compute_lr()
+        self.step += 1
         ret = super(TransformerLearner, self).learn(*args)
         return ret
 
     def predict(self, data, hidden):
-        output = self.model(data)
+        self.append_to_buffer(data)
+        output = self.model(self.get_buffered_data())
+        output = output[-data.size(0):,:]
         return output, hidden
 
+    def append_to_buffer(self, data):
+        if self.buffer is None:
+            self.buffer = data.detach().clone()
+        else:
+            self.buffer = torch.cat([self.buffer, data], dim=0)
+            self.buffer = self.buffer[-self.buffer_len:,:]
+
+    def get_buffered_data(self):
+        return self.buffer
+
     def generate(self, data, hidden):
+        raise RuntimeError("Not implemented (because of missing buffering)")
         output = self.model(data)
         return output.view(-1, self.vocsize), None
 

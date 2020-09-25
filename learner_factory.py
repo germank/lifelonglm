@@ -18,8 +18,9 @@ def get_learner(args, vocsize):
             args.batch_size, args.clip, args.learn_iterations)
     if args.architecture == 'transformer':
         return learner.TransformerLearner(
-            args.optimizer, args.lr, args.model, vocsize, args.emsize, args.nhead, args.nhid,
-            args.nlayers, args.dropout, args.learn_iterations, args.transformer_warmup)
+            args.optimizer, args.lr, args.model, vocsize, args.emsize, args.buffer_len, args.nhead, args.nhid,
+            args.nlayers, args.dropout, args.learn_iterations, args.transformer_warmup, 
+            args.transformer_after_warmup)
     elif args.architecture == 'simple_per_domain':
         return learner.StaticPerDomainLearner(
             args.optimizer, args.lr, args.model, vocsize, args.emsize, args.nhid,

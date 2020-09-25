@@ -45,14 +45,18 @@ parser.add_argument('--nhid', type=int, default=200,
                     help='number of hidden units per layer')
 parser.add_argument('--nhead', type=int, default=10,
                     help='number of attention heads for transformer')
+parser.add_argument('--buffer-len', type=int, default=512,
+                    help='maximum sequence length for transformer')
 parser.add_argument('--transformer-warmup', type=int, default=4000,
                     help='warmup steps for the transformer model')
+parser.add_argument('--transformer-after-warmup', default='decrease', choices=['flat', 'decrease'],
+                    help='what to do after the initial warmup period')
 parser.add_argument('--moe-warmup', type=int, default=0,
                     help='number of sequences used to train all modules')
 parser.add_argument('--nlayers', type=int, default=2,
                     help='number of layers')
 parser.add_argument('--lr', type=float, default=0.001,
-                    help='initial learning rate')
+                    help='learning rate (set to 42 for transformer\'s recommended settings)')
 parser.add_argument('--clip', type=float, default=1.0,
                     help='gradient clipping')
 parser.add_argument('--learn-iterations', type=int, default=1,
@@ -257,7 +261,7 @@ for sequence_index, (input_sequence, target_sequence) in enumerate(
         # FIXME: this logic should be in the sequence iterator
         global_position += len(input_sequence)
         continue
-    if sequence_index == args.moe_warmup and args.architecture == 'poe':
+    if args.moe_warmup > 0 and sequence_index == args.moe_warmup:
         learner.warmup_end()  # changes the weights trainer
     sequence_type = sequence_iterator.get_current_index()
     sequence_type_name = sequence_iterator.get_current_iterator().get_name()
@@ -292,8 +296,8 @@ for sequence_index, (input_sequence, target_sequence) in enumerate(
             elapsed = time.time() - start_time
             start_time = time.time()
             ppl = math.exp(batch_loss)
-            print('\tseq {:4d} / {:d} (ETA {}) | pos. {:8d}/{:d} ({:5d} to end) | lr {:02.5f} | '
-                    'loss {:5.2f} | ppl {:8.2f} | ms/batch {:5.2f}'.format(
+            print('\tseq {:4d} / {:d} (ETA {}) | pos. {:6d}/{:d} ({:4d} to end) | lr {:02.2e} | '
+                    'loss {:5.2f} | ppl {:6.2f} | ms/batch {:5.2f}'.format(
                 sequence_index, len(sequence_iterator), log_utils.format_eta(global_start_time, global_position, overall_size),
                 global_position, overall_size, sequence_end - global_position, learner.get_lr(), batch_loss, ppl, elapsed * 1000 / args.report_every)),
             #print(", ".join(("{:.2f}".format(w) for w in learner.get_weights(input_chunk).detach().cpu().numpy())))
@@ -310,5 +314,6 @@ gen_fout.close()
 gen_json_fout.close()
 detail_fout.close()
 generate_f.close()
-with open(args.save, 'wb') as f:
-    torch.save(learner, f)
+if args.save:
+    with open(args.save, 'wb') as f:
+        torch.save(learner, f)
