@@ -1,7 +1,6 @@
-# Class-Agnostic Continual Learning of Alternating Languages and Domains
+# Evaluating Online Continual Learning with CALM
 
-This folder contains the code associated with the paper _Class-Agnostic Continual Learning
-of Alternating Languages and Domains_.
+This folder contains the code associated with the paper _Evaluating Online Continual Learning with CALM_.
 
 The following instructions indicate how to download the data and train models.
 
