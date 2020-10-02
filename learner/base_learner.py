@@ -10,7 +10,7 @@ class BaseLearner(nn.Module):
     def __init__(self, criterion, vocsize, learn_iterations):
         super(BaseLearner, self).__init__()
         self.criterion = criterion
-        self.criterion_unreduced = nn.CrossEntropyLoss(reduction='none')
+        self.criterion_unreduced = criterion.__class__(reduction='none')
         self.learn_iterations = learn_iterations
         self.vocsize = vocsize
 

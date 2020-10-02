@@ -42,12 +42,13 @@ class MoELearner(BaseMixtureOfRNNsLearner):
                 until_convergence=False)
 
     def train_modules(self, data, outputs, targets):
+        weights = self.last_weights
         if self.diverse_ensembling and not self.warming:
-            losses = self.get_loss_unreduced(outputs, targets.repeat(len(outputs)))
+            predictions = self.get_prediction_unreduced(weights.detach(), outputs)
+            losses = self.get_loss_unreduced(predictions, targets.repeat(len(outputs)))
             losses = losses.reshape(len(outputs), -1)
             loss = losses.min(dim=0).values.mean()
         else:
-            weights = self.last_weights
             prediction = self.get_prediction(weights.detach(), outputs)
             loss = self.get_loss(prediction, targets)
         self.backpropagate_and_train_modules(loss)
@@ -76,7 +77,7 @@ class MoELearner(BaseMixtureOfRNNsLearner):
 
     def warmup_start(self):
         self.after_warmup_weights_trainer = self.weights_trainer
-        self.weights_trainer = train_weights.FixedWeights(self.get_n_modules())
+        self.weights_trainer = train_weights.FixedWeights(self.get_n_modules(),normalize=True)
         self.weights_trainer.n = self.get_n_modules()
         if next(self.after_warmup_weights_trainer.parameters()).is_cuda:
             self.weights_trainer.cuda()
@@ -86,5 +87,6 @@ class MoELearner(BaseMixtureOfRNNsLearner):
         if self.warming:
             self.weights_trainer = self.after_warmup_weights_trainer
             del self.after_warmup_weights_trainer
+            self._create_optimizer()
             self.warming = False
 

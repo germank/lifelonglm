@@ -52,7 +52,7 @@ def get_learner(args, vocsize):
 def get_weights_trainer(weights_trainer, args, vocsize):
     memory_size = args.max_memory_size
     if args.architecture == 'moe':
-        args.weights_normalization = True
+        args.weight_normalization = True
     if args.architecture == 'clone' and args.max_ltm_size != 0:
         memory_size += 1
     if weights_trainer == 'random':

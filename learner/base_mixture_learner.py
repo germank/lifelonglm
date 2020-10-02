@@ -22,7 +22,10 @@ class BaseMixtureOfRNNsLearner(BaseLearner):
             max_memory_size, lr, batch_size, clip, optimizer,
             module_normalization, train_weights_before_predict, weights_trainer, learn_iterations,
             tie_weights, w_window, dropout, is_cuda):
-        criterion = nn.CrossEntropyLoss()
+        if module_normalization:
+            criterion = nn.NLLLoss()
+        else:
+            criterion = nn.CrossEntropyLoss()
         super(BaseMixtureOfRNNsLearner, self).__init__(criterion, nout, learn_iterations)
         self.optimizer_algorithm = optimizer
         self.module_normalization = module_normalization
@@ -115,9 +118,13 @@ class BaseMixtureOfRNNsLearner(BaseLearner):
         return get_loss
 
     def get_prediction(self, weights, outputs):
-        weighted_out = weights * outputs
+        weighted_out = self.get_prediction_unreduced(weights, outputs)
         prediction = torch.sum(weighted_out, 0)
         return prediction
+
+    def get_prediction_unreduced(self, weights, outputs):
+        weighted_out = weights * outputs
+        return weighted_out
 
     def generate(self, data, hidden):
         """it passes the input through all the modules, and returns the weighted sum of the predictions

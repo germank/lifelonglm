@@ -26,8 +26,12 @@ pd.options.display.width = 0
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--clear-cache', action='store_true', default=False)
-    ap.add_argument('--agg', choices=['mean', 'std', 'min', 'count', 'last'], default='min')
+    ap.add_argument('--agg', choices=['mean', 'std', 'min', 'count', 'last', 'none', "enum"], default='min')
+    ap.add_argument('--show', action='append', default=[])
+    ap.add_argument('--remove-outliers', action='store_true', default=False)
+    ap.add_argument('--interactive', action='store_true', default=False)
     ap.add_argument('--save-test-configs', type=Path, help='directory where to put configuration files for winning hyperparameters')
+    ap.add_argument('--latex', action='store_true', default=False)
     ap.add_argument('log_path')
     args = ap.parse_args()
     if args.clear_cache:
@@ -37,18 +41,53 @@ def main():
     else:
         sys.stderr.write('warning: using cached results when available\n')
     df_data = get_results(Path(args.log_path), args.clear_cache)
+    if args.remove_outliers:
+        print("removing", (df_data.total_pp >= 1000).sum(), " entries")
+        df_data = df_data.loc[df_data.total_pp < 1000]
     df_grouped = get_df_grouped(df_data, args.agg)
-    display_results(df_grouped)
+    if args.interactive:
+        breakpoint()
+    elif args.latex:
+        display_latex_results(df_grouped)
+    else:
+        display_results(df_grouped, args.show)
     if args.save_test_configs:
         args.save_test_configs.mkdir(exist_ok=True)
         flat_df = df_to_numeric(df_grouped.reset_index(drop=True))
         save_test_configs(flat_df.loc[flat_df.data.str.contains("dev")],
                 args.save_test_configs)
 
+def display_latex_results(df):
+    df = df.reset_index(drop=False)
+    archs = df.architecture.unique()
+    nhid = df.nhid.unique()
+    trainers =  df.weights_trainer.unique()
+    for arch in archs:
+        for h in nhid:
+            for trainer in trainers:
+                row = collect_latex_row(df, arch, h, trainer)
+                print(arch, h, trainer, "&", " & ".join(f"${v:.3g}$" for v in row), r'\\')
+
+def collect_latex_row(df, arch, h, trainer):
+    entries = [("news_test", '10000'), ("news_test", '100000'), ("domain_test",
+        '10000'), ("domain_test", '20000')]
+    row = []
+    for data, lang_switch in entries:
+        row.extend(get_latex_values(df, arch, h, trainer, data, lang_switch))
+    return row
+
+def get_latex_values(df, arch, h, trainer, data, lang_switch):
+    df_row = df.loc[(df.architecture == arch)&(df.nhid==h)&(df.weights_trainer==trainer)&(df.data==data)&(df.lang_switch==lang_switch)]
+    assert len(df_row) == 1
+    df_row = df_row.iloc[0]
+    return df_row.total_pp, df_row.surprisal_intensity, df_row.surprisal_duration
+
+
 def get_results(log_path=None, clear_cache=False):
     df_configs = read_configs(log_path)
     df_data = add_results(df_configs, clear_cache)
     df_data = df_data.rename_axis('path').reset_index()
+    df_data.orig_path = df_data.path
     df_data.path = df_data.path.apply(lambda x: os.path.basename(x))
     df_data = df_data.set_index('path', drop=False)
     return df_data
@@ -137,6 +176,13 @@ def get_mean_loss_by_domain(parsed_results):
     domain_names = get_domain_names(parsed_results)
     return {domain_names[d]: np.mean(losses) for d, losses in losses_by_domain.items()}
 
+def get_losses_after_switch(parsed_results, k=10):
+    losses = get_loss_history(parsed_results)
+    switches = get_switch_times(parsed_results)
+    losses_after_switch = np.array([losses[t:t+k] for t in switches])
+    return losses_after_switch
+
+
 def stitch_losses_by_domain(parsed_results):
     loss_history = get_loss_history(parsed_results)
     switch_times = get_switch_times(parsed_results)
@@ -218,7 +264,7 @@ def read_config_file(filename):
 def get_id(filename):
     return int(filename.parent.name)
 
-def display_results(df_grouped):
+def display_results(df_grouped, show):
     pd.options.display.float_format = '{:,.3g}'.format
     pd.set_option('display.max_columns', 500)
     uniform_values = {}
@@ -227,7 +273,9 @@ def display_results(df_grouped):
     #     if ((df_grouped[col] == some_col_value).all()):
     #         uniform_values[col] = some_col_value
     #         df_grouped = df_grouped.drop(col, axis=1)
-    show = ['total_pp', 'surprisal_intensity', 'surprisal_duration', 'path', 'moe_warmup']
+    if not show:
+        show = ['data', 'total_length', 'lang_switch', 'architecture', 'nhid', 'weights_trainer']
+        show += ['total_pp', 'surprisal_intensity', 'surprisal_duration', 'path', 'moe_warmup']
     print(df_grouped[[c for c in show if c in df_grouped.columns]])
     for k, v in uniform_values.items():
         print(f"{k: <20}\t{v}")
@@ -277,22 +325,27 @@ def get_df_grouped(df_data, op='min'):
     #show.extend(pp_cols)
     #show.extend(loss_cols)
     #show.extend(surp_cols)
-    merit = 'total_pp'
-    df_grouped = df_data.groupby(group_by)
-    df_data['z_score'] = df_grouped.total_pp.apply(lambda x: (x -x.mean()) /x.std())
     #df_data = df_data[abs(df_data['z_score']) < 2]
-    df_grouped = df_data.groupby(group_by)
-    if op == 'mean':
-        df_grouped = df_grouped.mean()
-    elif op == 'count':
-        df_grouped = df_grouped.count()
-    elif op == 'std':
-        df_grouped = df_grouped.std()
-    elif op == 'last':
-        df_grouped = df_grouped.last()
+    if op != 'none':
+        merit = 'total_pp'
+        df_grouped = df_data.groupby(group_by)
+        df_data['z_score'] = df_grouped.total_pp.apply(lambda x: (x -x.mean()) /x.std())
+        df_grouped = df_data.groupby(group_by)
+        if op == 'mean':
+            df_grouped = df_grouped.mean()
+        elif op == 'count':
+            df_grouped = df_grouped.count()
+        elif op == 'std':
+            df_grouped = df_grouped.std()
+        elif op == 'last':
+            df_grouped = df_grouped.last()
+        elif op == 'enum':
+            df_grouped = df_grouped.apply(lambda x: x.loc[~x[merit].isna()].apply(lambda v: ", ".join(v.astype(str))))
+        elif op == 'min':
+            df_grouped = df_grouped.apply(lambda x: x.loc[x[merit] == x[merit].min(), x.keys()])
+            df_grouped = df_grouped.drop_duplicates(subset=[merit])
     else:
-        df_grouped = df_grouped.apply(lambda x: x.loc[x[merit] == x[merit].min(), x.keys()])
-        df_grouped = df_grouped.drop_duplicates(subset=[merit])
+        df_grouped = df_data
 
     #df_grouped = df_grouped[[merit]+show]
                     #.sort_values(merit)
@@ -356,11 +409,10 @@ def save_test_configs(df_best_cfgs, save_dir):
         cfg['cluster-run'] = True
         cfg['cluster-run-name'] = cfg['architecture'] + '_test'
         cfg['log-dir'] = 'logs'
-        for i in range(10):
-            cfg['seed'] = i
-            cfg_name = cfg2name(cfg)
-            with open(save_dir / (cfg_name + '.yml'), 'w') as f:
-                yaml.dump(cfg, f)
+        cfg['seed'] = list(range(10))
+        cfg_name = cfg2name(cfg)
+        with open(save_dir / (cfg_name + '.yml'), 'w') as f:
+            yaml.dump(cfg, f)
 
 def cfg_ds2dict(row):
     ret = {}
@@ -374,7 +426,7 @@ def cfg2name(cfg):
     else:
         arch_id = f"{cfg['architecture']}"
     return f"{arch_id}_{cfg['data'].split('/')[1][:-len('_test')]}_"\
-            f"{number(cfg['total-length'])}_{number(cfg['lang-switch'])}_{cfg['seed']}"
+            f"{number(cfg['total-length'])}_{number(cfg['lang-switch'])}"
 
 def number(n):
     n = int(n)
