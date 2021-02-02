@@ -1,6 +1,6 @@
 # Evaluating Online Continual Learning with CALM
 
-This folder contains the code associated with the paper _Evaluating Online Continual Learning with CALM_.
+This folder contains the code associated with the paper [_Evaluating Online Continual Learning with CALM_](https://arxiv.org/abs/2004.03340).
 
 The following instructions indicate how to download the data and train models.
 
@@ -54,3 +54,20 @@ where `logs_parent_directory` stands for the parent directory containing multipl
 runs (as it is for instance the value of the `--log-dir` parameter above when `--cluster-run` is being used).
 
 This script automatically groups results by dataset and architecture. By default best values per group are returned. To obtain the means, append the `--mean` argument.
+
+## Stand-alone Dataset
+
+If you want to use the CALM dataset for your own experiments, you can directly use the library which is available at https://github.com/germank/calm.
+
+## Citation
+
+Should you need to cite this work, you can use the following BibTeX entry:
+
+```
+@article{Kruszewski:Sorodoc:Mikolov:2020,
+  title={Class-Agnostic Continual Learning of Alternating Languages and Domains},
+  author={Kruszewski, Germ{\'a}n and Sorodoc, Ionut-Teodor and Mikolov, Tomas},
+  journal={arXiv preprint arXiv:2004.03340},
+  year={2020}
+}
+```
